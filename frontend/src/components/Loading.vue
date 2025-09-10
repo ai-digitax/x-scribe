@@ -24,7 +24,7 @@ defineProps<Props>()
       </div>
       <div v-if="progress" class="progress-info">
         <p class="loading-message">{{ progress.message }}</p>
-        <p v-if="progress.total_chunks > 0" class="progress-text">{{ progress.current_chunk - 1 }} / {{ progress.total_chunks }} ( {{ (((progress.current_chunk - 1) / progress.total_chunks) * 100).toFixed(0) }} %)</p>
+        <p v-if="progress.total_chunks > 0" class="progress-text">{{ progress.current_chunk - 1 }} / {{ progress.total_chunks }} ({{ (((progress.current_chunk - 1) / progress.total_chunks) * 100).toFixed(0) }} %)</p>
         <div v-if="progress.total_chunks > 0" class="progress-bar">
           <div
             class="progress-fill"

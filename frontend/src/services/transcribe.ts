@@ -9,6 +9,8 @@ export interface ReqTranscribe {
 
 export interface ResTranscribe {
   text: string
+  duration: number
+  fileSize: number
 }
 
 export interface TranscribeProgress {
@@ -28,14 +30,8 @@ export class TranscribeService {
   }
 
   async transcribe(audioFile: File, options: ReqTranscribe = {}): Promise<ResTranscribe> {
+    const startTime = Date.now()
     const { model = 'whisper-1', language = 'ja', prompt, onProgress } = options
-
-    console.log('[TranscribeService] 開始:', {
-      fileName: audioFile.name,
-      fileSize: audioFile.size,
-      model,
-      language
-    })
 
     onProgress?.({
       current_chunk: 0,
@@ -44,74 +40,83 @@ export class TranscribeService {
       message: 'アップロード中です...'
     })
 
+    const chunks = await this.prepareChunks(audioFile)
+    const transcripts = await this.processChunks(chunks, { model, language, prompt, onProgress })
+    const finalText = transcripts.join(' ')
+
+    return {
+      text: finalText,
+      duration: Date.now() - startTime,
+      fileSize: audioFile.size
+    }
+  }
+
+  private async prepareChunks(audioFile: File): Promise<File[]> {
     const audioContext = new AudioContext()
     const arrayBuffer = await audioFile.arrayBuffer()
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
     const duration = audioBuffer.duration
 
-    console.log('[TranscribeService] オーディオ情報:', {
-      duration: `${duration.toFixed(2)}秒`,
-      sampleRate: audioBuffer.sampleRate,
-      channels: audioBuffer.numberOfChannels
-    })
+    const chunkDuration = Math.min(
+      AudioSplitter.calcUnitDuration(audioFile.size, duration),
+      300
+    )
 
-    const chunkDuration = AudioSplitter.calcUnitDuration(audioFile.size, duration)
     const chunks = await AudioSplitter.splitAudioFile(audioFile, chunkDuration)
+    audioContext.close()
+    return chunks
+  }
+
+  private async processChunks(
+    chunks: File[],
+    options: { model: string; language: string; prompt?: string; onProgress?: ProgressCallback }
+  ): Promise<string[]> {
+    const { model, language, prompt, onProgress } = options
     const transcripts: string[] = []
 
-    console.log('[TranscribeService] チャンク分割完了:', {
-      totalChunks: chunks.length,
-      chunkDuration: `${chunkDuration}秒`
+    onProgress?.({
+      current_chunk: 0,
+      total_chunks: chunks.length,
+      chunk_transcript: '',
+      message: '文字起こし処理を開始します...'
     })
 
     for (let i = 0; i < chunks.length; i++) {
-      console.log(`[TranscribeService] チャンク ${i + 1}/${chunks.length} 処理開始`)
-
-      const progressBefore = {
+      onProgress?.({
         current_chunk: i + 1,
         total_chunks: chunks.length,
-        chunk_transcript: transcripts.length > 0 ? transcripts[transcripts.length - 1] : '',
+        chunk_transcript: transcripts[transcripts.length - 1] || '',
         message: '文字起こし処理中です...'
-      }
-
-      console.log('[TranscribeService] 進捗更新 (処理前):', progressBefore)
-      onProgress?.(progressBefore)
-
-      const result = await this.transcribeChunk(chunks[i], { model, language, prompt })
-      transcripts.push(result.text)
-
-      console.log(`[TranscribeService] チャンク ${i + 1} 完了:`, {
-        text: result.text,
-        textLength: result.text.length,
-        preview: result.text.substring(0, 50) + (result.text.length > 50 ? '...' : '')
       })
 
-      // 処理完了後に最新のチャンクの内容を表示
-      const progressAfter = {
-        current_chunk: i + 1,
-        total_chunks: chunks.length,
-        chunk_transcript: result.text,
-        message: '文字起こし処理中です...'
-      }
+      try {
+        const result = await this.transcribeChunk(chunks[i], { model, language, prompt })
+        transcripts.push(result)
 
-      console.log('[TranscribeService] 進捗更新 (処理後):', progressAfter)
-      onProgress?.(progressAfter)
+        onProgress?.({
+          current_chunk: i + 1,
+          total_chunks: chunks.length,
+          chunk_transcript: result,
+          message: '文字起こし処理中です...'
+        })
+      } catch (error) {
+        transcripts.push('')
+        onProgress?.({
+          current_chunk: i + 1,
+          total_chunks: chunks.length,
+          chunk_transcript: '',
+          message: `ファイル ${i + 1} でエラーが発生しました`
+        })
+      }
     }
 
-    const finalText = transcripts.join(' ')
-    console.log('[TranscribeService] 全処理完了:', {
-      totalChunks: chunks.length,
-      finalTextLength: finalText.length,
-      preview: finalText.substring(0, 100) + (finalText.length > 100 ? '...' : '')
-    })
-
-    return { text: finalText }
+    return transcripts
   }
 
   private async transcribeChunk(
     audioFile: File,
     options: { model: string; language: string; prompt?: string }
-  ): Promise<ResTranscribe> {
+  ): Promise<string> {
     const formData = new FormData()
     formData.append('file', audioFile)
     formData.append('model', options.model)
@@ -132,7 +137,7 @@ export class TranscribeService {
     }
 
     const result = await response.json()
-    return { text: result.text || '' }
+    return result.text || ''
   }
 }
 

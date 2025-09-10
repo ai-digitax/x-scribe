@@ -5,6 +5,31 @@ export class AudioSplitter {
     return totalDuration / requiredChunks
   }
 
+  static async splitLargeFile(audioFile: File, maxFileSize: number): Promise<File[]> {
+    if (audioFile.size <= maxFileSize) {
+      return [audioFile]
+    }
+
+    const fileChunks: File[] = []
+    const totalSize = audioFile.size
+    let offset = 0
+    let chunkIndex = 0
+
+    while (offset < totalSize) {
+      const chunkSize = Math.min(maxFileSize, totalSize - offset)
+      const chunkBlob = audioFile.slice(offset, offset + chunkSize)
+      const chunkFile = new File([chunkBlob], `${audioFile.name}_part${chunkIndex}.${audioFile.name.split('.').pop()}`, {
+        type: audioFile.type
+      })
+
+      fileChunks.push(chunkFile)
+      offset += chunkSize
+      chunkIndex++
+    }
+
+    return fileChunks
+  }
+
   static async splitAudioFile(audioFile: File, chunkDurationSeconds: number): Promise<File[]> {
     const audioContext = new AudioContext()
     const arrayBuffer = await audioFile.arrayBuffer()
