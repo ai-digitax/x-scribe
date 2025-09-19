@@ -40,7 +40,9 @@ export class TranscribeService {
       message: 'アップロード中です...'
     })
 
+    console.log('音声ファイルのサイズ:', (audioFile.size / (1024 * 1024)).toFixed(2), 'MB')
     const chunks = await this.prepareChunks(audioFile)
+    console.log('ファイルを分割しました:', chunks)
     const transcripts = await this.processChunks(chunks, { model, language, prompt, onProgress })
     const finalText = transcripts.join(' ')
 
@@ -57,10 +59,12 @@ export class TranscribeService {
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
     const duration = audioBuffer.duration
 
+    console.log('音声ファイルの長さ（秒）:', duration)
     const chunkDuration = Math.min(
       AudioSplitter.calcUnitDuration(audioFile.size, duration),
-      300
+      100
     )
+    console.log('計算された分割時間（秒）:', chunkDuration)
 
     const chunks = await AudioSplitter.splitAudioFile(audioFile, chunkDuration)
     audioContext.close()
@@ -89,8 +93,12 @@ export class TranscribeService {
         message: '文字起こし処理中です...'
       })
 
+      // チャンクのサイズをログに出力
+      console.log(`チャンク ${i + 1}/${chunks.length} のサイズ: ${(chunks[i].size / (1024 * 1024)).toFixed(2)}MB`)
+
       try {
         const result = await this.transcribeChunk(chunks[i], { model, language, prompt })
+        console.log('チャンクの文字起こし結果:', result)
         transcripts.push(result)
 
         onProgress?.({
@@ -100,6 +108,7 @@ export class TranscribeService {
           message: '文字起こし処理中です...'
         })
       } catch (error) {
+        console.error('チャンクの文字起こし中にエラーが発生しました:', error)
         transcripts.push('')
         onProgress?.({
           current_chunk: i + 1,
@@ -124,6 +133,10 @@ export class TranscribeService {
 
     if (options.language) formData.append('language', options.language)
     if (options.prompt) formData.append('prompt', options.prompt)
+
+    // 送信するデータのサイズをログに出力
+    console.log(`送信するデータのサイズ: ${(audioFile.size / (1024 * 1024)).toFixed(2)}MB`)
+    console.log(`送信するファイル名: ${audioFile.name}, タイプ: ${audioFile.type}`)
 
     const response = await fetch('/api/openai/v1/audio/transcriptions', {
       method: 'POST',

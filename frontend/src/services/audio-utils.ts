@@ -38,6 +38,9 @@ export class AudioSplitter {
     const duration = audioBuffer.duration
     const numChunks = Math.ceil(duration / chunkDurationSeconds)
     const chunks: File[] = []
+    
+    console.log(`元のファイル: ${(audioFile.size / (1024 * 1024)).toFixed(2)}MB, 長さ: ${duration.toFixed(2)}秒`)
+    console.log(`チャンク数: ${numChunks}, チャンク時間: ${chunkDurationSeconds.toFixed(2)}秒`)
 
     for (let i = 0; i < numChunks; i++) {
       const startTime = i * chunkDurationSeconds
@@ -46,7 +49,8 @@ export class AudioSplitter {
       const chunkBuffer = this.extractChunk(audioBuffer, startTime, endTime)
       const chunkBlob = this.audioBufferToWav(chunkBuffer)
       const chunkFile = new File([chunkBlob], `chunk_${i}.wav`, { type: 'audio/wav' })
-
+      
+      console.log(`チャンク ${i+1}/${numChunks}: ${(chunkFile.size / (1024 * 1024)).toFixed(2)}MB, 時間: ${(endTime - startTime).toFixed(2)}秒`)
       chunks.push(chunkFile)
     }
 
