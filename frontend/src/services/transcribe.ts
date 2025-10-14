@@ -1,4 +1,5 @@
-import { AudioSplitter } from './audio-utils'
+import { Xapi } from './xapi'
+import type { ResXapiMediaSplit } from '../types'
 
 export interface ReqTranscribe {
   model?: string
@@ -41,9 +42,9 @@ export class TranscribeService {
     })
 
     console.log('音声ファイルのサイズ:', (audioFile.size / (1024 * 1024)).toFixed(2), 'MB')
-    const chunks = await this.prepareChunks(audioFile)
-    console.log('ファイルを分割しました:', chunks)
-    const transcripts = await this.processChunks(chunks, { model, language, prompt, onProgress })
+    const urls = await this.prepareChunks(audioFile)
+    console.log('ファイルを分割しました:', urls)
+    const transcripts = await this.processChunks(urls, { model, language, prompt, onProgress })
     const finalText = transcripts.join(' ')
 
     return {
@@ -53,26 +54,14 @@ export class TranscribeService {
     }
   }
 
-  private async prepareChunks(audioFile: File): Promise<File[]> {
-    const audioContext = new AudioContext()
-    const arrayBuffer = await audioFile.arrayBuffer()
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-    const duration = audioBuffer.duration
-
-    console.log('音声ファイルの長さ（秒）:', duration)
-    const chunkDuration = Math.min(
-      AudioSplitter.calcUnitDuration(audioFile.size, duration),
-      100
-    )
-    console.log('計算された分割時間（秒）:', chunkDuration)
-
-    const chunks = await AudioSplitter.splitAudioFile(audioFile, chunkDuration)
-    audioContext.close()
-    return chunks
+  private async prepareChunks(audioFile: File): Promise<string[]> {
+    const fileSize = 25
+    const response = await Xapi.MediaSplit<ResXapiMediaSplit>(audioFile, fileSize)
+    return response.media_urls
   }
 
   private async processChunks(
-    chunks: File[],
+    urls: string[],
     options: { model: string; language: string; prompt?: string; onProgress?: ProgressCallback }
   ): Promise<string[]> {
     const { model, language, prompt, onProgress } = options
@@ -80,30 +69,35 @@ export class TranscribeService {
 
     onProgress?.({
       current_chunk: 0,
-      total_chunks: chunks.length,
+      total_chunks: urls.length,
       chunk_transcript: '',
       message: '文字起こし処理を開始します...'
     })
 
-    for (let i = 0; i < chunks.length; i++) {
+    for (let i = 0; i < urls.length; i++) {
       onProgress?.({
         current_chunk: i + 1,
-        total_chunks: chunks.length,
+        total_chunks: urls.length,
         chunk_transcript: transcripts[transcripts.length - 1] || '',
         message: '文字起こし処理中です...'
       })
 
-      // チャンクのサイズをログに出力
-      console.log(`チャンク ${i + 1}/${chunks.length} のサイズ: ${(chunks[i].size / (1024 * 1024)).toFixed(2)}MB`)
-
       try {
-        const result = await this.transcribeChunk(chunks[i], { model, language, prompt })
+        // URLからファイルを取得
+        const response = await fetch(urls[i])
+        const blob = await response.blob()
+        const audioFile = new File([blob], `chunk_${i}.mp3`, { type: 'audio/mp3' })
+        
+        // チャンクのサイズをログに出力
+        console.log(`チャンク ${i + 1}/${urls.length} のサイズ: ${(audioFile.size / (1024 * 1024)).toFixed(2)}MB`)
+
+        const result = await this.transcribeChunk(audioFile, { model, language, prompt })
         console.log('チャンクの文字起こし結果:', result)
         transcripts.push(result)
 
         onProgress?.({
           current_chunk: i + 1,
-          total_chunks: chunks.length,
+          total_chunks: urls.length,
           chunk_transcript: result,
           message: '文字起こし処理中です...'
         })
@@ -112,7 +106,7 @@ export class TranscribeService {
         transcripts.push('')
         onProgress?.({
           current_chunk: i + 1,
-          total_chunks: chunks.length,
+          total_chunks: urls.length,
           chunk_transcript: '',
           message: `ファイル ${i + 1} でエラーが発生しました`
         })
