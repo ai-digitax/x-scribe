@@ -71,9 +71,35 @@ const submitForm = async () => {
 
 const copyToClipboard = async () => {
   try {
-    await navigator.clipboard.writeText(transcribedText.value)
-    toastStore.showSuccess('クリップボードにコピーしました')
+    // 近代的なClipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(transcribedText.value)
+      toastStore.showSuccess('クリップボードにコピーしました')
+      return
+    }
+    
+    // フォールバック方法: document.execCommand
+    const textArea = document.createElement('textarea')
+    textArea.value = transcribedText.value
+    
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-999999px'
+    textArea.style.top = '-999999px'
+    document.body.appendChild(textArea)
+    
+    textArea.focus()
+    textArea.select()
+    
+    const success = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    
+    if (success) {
+      toastStore.showSuccess('クリップボードにコピーしました')
+    } else {
+      toastStore.showError('コピーに失敗しました')
+    }
   } catch (error) {
+    console.error('クリップボードへのコピーに失敗しました:', error)
     toastStore.showError('コピーに失敗しました')
   }
 }

@@ -55,7 +55,7 @@ export class TranscribeService {
   }
 
   private async prepareChunks(audioFile: File): Promise<string[]> {
-    const fileSize = 25
+    const fileSize = 23
     const response = await Xapi.MediaSplit<ResXapiMediaSplit>(audioFile, fileSize)
     return response.media_urls
   }
@@ -86,7 +86,11 @@ export class TranscribeService {
         // URLからファイルを取得
         const response = await fetch(urls[i])
         const blob = await response.blob()
-        const audioFile = new File([blob], `chunk_${i}.mp3`, { type: 'audio/mp3' })
+        
+        // URLから拡張子を取得
+        const extension = urls[i].split('.').pop()?.toLowerCase() || 'mp3'
+        const mimeType = extension === 'mp3' ? 'audio/mp3' : `audio/${extension}`
+        const audioFile = new File([blob], `chunk_${i}.${extension}`, { type: mimeType })
         
         // チャンクのサイズをログに出力
         console.log(`チャンク ${i + 1}/${urls.length} のサイズ: ${(audioFile.size / (1024 * 1024)).toFixed(2)}MB`)
@@ -128,15 +132,22 @@ export class TranscribeService {
     if (options.language) formData.append('language', options.language)
     if (options.prompt) formData.append('prompt', options.prompt)
 
-    // 送信するデータのサイズをログに出力
-    console.log(`送信するデータのサイズ: ${(audioFile.size / (1024 * 1024)).toFixed(2)}MB`)
-    console.log(`送信するファイル名: ${audioFile.name}, タイプ: ${audioFile.type}`)
+    // 送信するデータの情報をログに出力
+    console.log(`音声ファイル情報: 名前=${audioFile.name}, タイプ=${audioFile.type}, サイズ=${(audioFile.size / (1024 * 1024)).toFixed(2)}MB`)
 
+    const startTime = new Date()
+    console.log(`文字起こし開始時間: ${startTime.toISOString()}`)
+    
     const response = await fetch('/api/openai/v1/audio/transcriptions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${this.apiKey}` },
       body: formData
     })
+    
+    const endTime = new Date()
+    const processingTime = (endTime.getTime() - startTime.getTime()) / 1000
+    console.log(`文字起こし終了時間: ${endTime.toISOString()}`)
+    console.log(`文字起こし処理時間: ${processingTime.toFixed(2)}秒`)
 
     if (!response.ok) {
       const errorData = await response.text()
