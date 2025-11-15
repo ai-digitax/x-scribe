@@ -110,7 +110,7 @@ const copyToClipboard = async () => {
       >
         <div class="file-icon">🎵</div>
         <p>ファイルをドラッグ＆ドロップするか、クリックして選択してください</p>
-        <p>MP3 / M4A / WAV / MP4</p>
+        <p>MP3 / WAV / MP4</p>
         <p v-if="fileName" class="file-name">選択されたファイル: {{ fileName }}</p>
       </div>
       <input
