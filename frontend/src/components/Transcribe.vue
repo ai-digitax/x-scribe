@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import Loading from './Loading.vue'
 import { useToastStore } from '../stores/toast'
 import { createTranscribeService, type TranscribeProgress } from '../services/transcribe'
-import { config } from '../config'
 
 const toastStore = useToastStore()
 
@@ -39,23 +38,16 @@ const handleDragOver = (event: DragEvent) => {
 const submitForm = async () => {
   if (!audioFile.value) return
 
-  if (!config.openaiApiKey.trim()) {
-    toastStore.showError('APIキーが設定されていません。システム管理者に連絡してください。')
-    return
-  }
-
   isLoading.value = true
   progress.value = undefined
   transcribedText.value = ''
 
   try {
-    const transcribeService = createTranscribeService(config.openaiApiKey)
-    const result = await transcribeService.transcribe(audioFile.value, {
-      language: 'ja',
-      onProgress: (progressData) => {
-        progress.value = progressData
-      }
-    })
+    const transcribeService = createTranscribeService()
+    const result = await transcribeService.transcribe(
+      audioFile.value,
+      (p) => { progress.value = p; }
+    )
 
     // 最終結果のみを表示
     transcribedText.value = result.text
